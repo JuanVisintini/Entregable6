@@ -8,10 +8,10 @@ const { Server: IOServer } = require('socket.io')
 const expressServer = app.listen(8080, () => console.log('Servidor escuchando puerto 8080'))
 const io = new IOServer(expressServer)
 
-const Producto = require("./model/Producto")
-const contenedorMessage = new Producto("message.json");
-const contenedorProducto = new Producto("productos.json");
 
+
+
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static("public"));
 
@@ -34,24 +34,36 @@ app.get("/api/productos", (req, res) => {
 }) 
 
 
+const {  Contenedor  } = require('./model/productos')
+const { ContenedorChat } = require('./model/chat')
+
+const chatbd = require('./bd/bd').databaseConnection;
+const productoBaseDato = require('./bd/bd').databaseConectionMysql;
+
+const productodb = new Contenedor(productoBaseDato, 'producto')
+const chatBd = new ContenedorChat(chatbd, 'mensajes')
+
+
 io.on('connection', async (socket) => {
     console.log(`se conecto el usuario: ${socket.id}`)
-    socket.emit('leerMessage', await contenedorMessage.getAll())
-    socket.emit('leerProducto', await contenedorProducto.getAll()) 
+    let productos = await productodb.getAll()
+    let mensajes = await chatBd.getAll()
+
+    socket.emit('leerProducto', productos)
+    socket.emit('leerMensaje', mensajes)
 
     socket.on('nuevoProducto', async (productoInfo) => {
-        const idProducto = await contenedorProducto.save(productoInfo)
-        if(idProducto){
-            io.sockets.emit('leerProdcuto', await contenedorProducto.getAll());
-        }
+      await productodb.insertObject(productoInfo);
+      productos = await productodb.getAll()
+
+      io.emit('leerProducto', productos)
     })
 
     socket.on('nuevoMensaje', async (messageInfo) => {
-        const idMensaje = await contenedorMessage.save(messageInfo)
-        if(idMensaje){
-            io.sockets.emit('leerMessage', await contenedorMessage.getAll())
-        }
-        
+        await chatBd.insertObject(messageInfo);
+        mensajes = await chatBd.getAll()
+
+        io.emit('leerMensaje', mensajes)
     })
 })
 
